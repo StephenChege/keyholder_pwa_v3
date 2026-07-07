@@ -10,8 +10,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  // base: '/keyholder_pwa_v3/',
-  base: '/',
+  base: '/keyholder_pwa_v3/',
   server: {
     port: 5173,
   },

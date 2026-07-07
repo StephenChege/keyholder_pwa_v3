@@ -1,63 +1,89 @@
 import React, { useState, useEffect } from 'react';
 import ControlPanel from './components/ControlPanel';
+import MapScreen from './components/MapScreen';
 import Settings from './components/Settings';
 import useBLE from './hooks/useBLE';
 
 export default function App() {
+  // =========================================================================
+  // THEME STATE
+  // =========================================================================
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('keyholder-theme');
     return saved ? saved === 'dark' : true;
   });
-  
-  const [showSettings, setShowSettings] = useState(false);
+
+  // =========================================================================
+  // DEVICE & SETTINGS STATE
+  // =========================================================================
   const [deviceName, setDeviceName] = useState(() => {
     return localStorage.getItem('keyholder-device-name') || 'My Device';
   });
-  
-  // Proximity Response Toggle
+
   const [proximityResponseEnabled, setProximityResponseEnabled] = useState(() => {
     const saved = localStorage.getItem('keyholder-proximity-response');
     return saved ? saved === 'true' : false;
   });
-  
-  // LED state
+
+  // =========================================================================
+  // LED & BUZZER STATE
+  // =========================================================================
   const [ledOn, setLedOn] = useState(false);
   const [ledBrightness, setLedBrightness] = useState(50);
-  
-  // Buzzer state
   const [buzzerOn, setBuzzerOn] = useState(false);
   const [buzzerVolume, setBuzzerVolume] = useState(50);
 
-  const { 
-    connectedDevice, 
-    connect, 
-    disconnect, 
+  // =========================================================================
+  // TAB STATE (NEW for Phase 3.3)
+  // =========================================================================
+  const [currentTab, setCurrentTab] = useState('control'); // control, map, settings
+
+  // =========================================================================
+  // BLE HOOK
+  // =========================================================================
+  const {
+    connectedDevice,
+    disconnect,
     discoveryInProgress,
     startDiscovery,
     sendLedBrightness,
     sendBuzzerVolume,
     rssi,
     proximityPercent,
-    getProximityOutputValue
+    getProximityOutputValue,
   } = useBLE();
 
-  // Save theme preference
+  // =========================================================================
+  // PERSIST THEME
+  // =========================================================================
   useEffect(() => {
     localStorage.setItem('keyholder-theme', darkMode ? 'dark' : 'light');
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
   }, [darkMode]);
 
-  // Save device name
+  // =========================================================================
+  // PERSIST DEVICE NAME
+  // =========================================================================
   useEffect(() => {
     if (deviceName) {
       localStorage.setItem('keyholder-device-name', deviceName);
     }
   }, [deviceName]);
 
-  // Save proximity response preference
+  // =========================================================================
+  // PERSIST PROXIMITY RESPONSE
+  // =========================================================================
   useEffect(() => {
     localStorage.setItem('keyholder-proximity-response', proximityResponseEnabled ? 'true' : 'false');
   }, [proximityResponseEnabled]);
 
+  // =========================================================================
+  // HANDLERS
+  // =========================================================================
   const handleAddDevice = async () => {
     await startDiscovery();
   };
@@ -84,102 +110,166 @@ export default function App() {
     setProximityResponseEnabled(!proximityResponseEnabled);
   };
 
+  const handleThemeToggle = () => {
+    setDarkMode(!darkMode);
+  };
+
+  // =========================================================================
+  // STYLES
+  // =========================================================================
   const bgClass = darkMode ? 'bg-slate-950' : 'bg-white';
   const textClass = darkMode ? 'text-white' : 'text-slate-900';
   const borderClass = darkMode ? 'border-slate-800' : 'border-slate-200';
 
+  // =========================================================================
+  // RENDER
+  // =========================================================================
   return (
-    <div className={`${bgClass} ${textClass} min-h-screen transition-colors`}>
-      {/* Header */}
+    <div className={`${bgClass} ${textClass} h-screen flex flex-col`}>
+      {/* ===== HEADER ===== */}
       <header className={`border-b ${borderClass} sticky top-0 z-50`}>
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Keyholder</h1>
-            <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-              {connectedDevice ? `Connected to ${deviceName}` : 'No device connected'}
-            </p>
+        <div className="max-w-2xl mx-auto px-4 py-4">
+          {/* Title + Connection Status */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold">🔑 Keyholder</h1>
+              <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                {connectedDevice ? `Connected to ${deviceName}` : 'No device connected'}
+              </p>
+            </div>
           </div>
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-200'}`}
-            title="Settings"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
+
+          {/* TAB NAVIGATION (NEW for Phase 3.3) */}
+          <div className={`flex gap-1 border-b ${borderClass}`}>
+            <button
+              onClick={() => setCurrentTab('control')}
+              className={`px-4 py-2 font-medium transition-colors ${
+                currentTab === 'control'
+                  ? `border-b-2 ${darkMode ? 'border-emerald-500 text-emerald-400' : 'border-emerald-600 text-emerald-600'}`
+                  : darkMode
+                  ? 'text-slate-400 hover:text-slate-300'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🎛️ Control
+            </button>
+
+            <button
+              onClick={() => setCurrentTab('map')}
+              className={`px-4 py-2 font-medium transition-colors ${
+                currentTab === 'map'
+                  ? `border-b-2 ${darkMode ? 'border-emerald-500 text-emerald-400' : 'border-emerald-600 text-emerald-600'}`
+                  : darkMode
+                  ? 'text-slate-400 hover:text-slate-300'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🗺️ Map
+            </button>
+
+            <button
+              onClick={() => setCurrentTab('settings')}
+              className={`px-4 py-2 font-medium transition-colors ${
+                currentTab === 'settings'
+                  ? `border-b-2 ${darkMode ? 'border-emerald-500 text-emerald-400' : 'border-emerald-600 text-emerald-600'}`
+                  : darkMode
+                  ? 'text-slate-400 hover:text-slate-300'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              ⚙️ Settings
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Settings Panel */}
-      {showSettings && (
-        <Settings
-          darkMode={darkMode}
-          onThemeToggle={() => setDarkMode(!darkMode)}
-          connectedDevice={connectedDevice}
-          deviceName={deviceName}
-          onRenameDevice={(newName) => setDeviceName(newName)}
-          onDisconnect={handleDisconnect}
-          onResetSettings={handleResetAll}
-        />
-      )}
+      {/* ===== MAIN CONTENT ===== */}
+      <main className="flex-1 overflow-hidden flex flex-col">
+        {/* CONTROL TAB */}
+        {currentTab === 'control' && (
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-2xl mx-auto px-4 py-6 pb-20">
+              {/* Device Connection */}
+              {!connectedDevice && (
+                <div className={`p-6 rounded-lg border-2 border-dashed ${
+                  darkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-300 bg-slate-100'
+                } text-center mb-6`}>
+                  <p className={`mb-4 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    No device connected
+                  </p>
+                  <button
+                    onClick={handleAddDevice}
+                    disabled={discoveryInProgress}
+                    className={`px-6 py-2 rounded-lg font-medium transition-all ${
+                      discoveryInProgress
+                        ? darkMode
+                          ? 'bg-slate-800 text-slate-400'
+                          : 'bg-slate-200 text-slate-400'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    }`}
+                  >
+                    {discoveryInProgress ? 'Scanning...' : 'Connect Device'}
+                  </button>
+                </div>
+              )}
 
-      <main className="max-w-2xl mx-auto px-4 py-6 pb-20">
-        {/* Device Connection */}
-        {!connectedDevice && (
-          <div className={`p-6 rounded-lg border-2 border-dashed ${
-            darkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-300 bg-slate-100'
-          } text-center mb-6`}>
-            <p className={`mb-4 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-              No device connected
-            </p>
-            <button
-              onClick={handleAddDevice}
-              disabled={discoveryInProgress}
-              className={`px-6 py-2 rounded-lg font-medium transition-all ${
-                discoveryInProgress
-                  ? darkMode
-                    ? 'bg-slate-800 text-slate-400'
-                    : 'bg-slate-200 text-slate-400'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-              }`}
-            >
-              {discoveryInProgress ? 'Scanning...' : 'Connect Device'}
-            </button>
+              {/* Control Panel */}
+              {connectedDevice && (
+                <>
+                  <ControlPanel
+                    ledOn={ledOn}
+                    setLedOn={setLedOn}
+                    ledBrightness={ledBrightness}
+                    setLedBrightness={setLedBrightness}
+                    buzzerOn={buzzerOn}
+                    setBuzzerOn={setBuzzerOn}
+                    buzzerVolume={buzzerVolume}
+                    setBuzzerVolume={setBuzzerVolume}
+                    darkMode={darkMode}
+                    connectedDevice={connectedDevice}
+                    sendLedBrightness={sendLedBrightness}
+                    sendBuzzerVolume={sendBuzzerVolume}
+                    rssi={rssi}
+                    proximityPercent={proximityPercent}
+                    proximityResponseEnabled={proximityResponseEnabled}
+                    onToggleProximityResponse={handleToggleProximityResponse}
+                    getProximityOutputValue={getProximityOutputValue}
+                  />
+
+                  <button
+                    onClick={handleDisconnect}
+                    className="w-full mt-6 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-medium transition-all"
+                  >
+                    Disconnect
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Control Panel */}
-        {connectedDevice && (
-          <>
-            <ControlPanel
-              ledOn={ledOn}
-              setLedOn={setLedOn}
-              ledBrightness={ledBrightness}
-              setLedBrightness={setLedBrightness}
-              buzzerOn={buzzerOn}
-              setBuzzerOn={setBuzzerOn}
-              buzzerVolume={buzzerVolume}
-              setBuzzerVolume={setBuzzerVolume}
-              darkMode={darkMode}
-              connectedDevice={connectedDevice}
-              sendLedBrightness={sendLedBrightness}
-              sendBuzzerVolume={sendBuzzerVolume}
-              rssi={rssi}
-              proximityPercent={proximityPercent}
-              proximityResponseEnabled={proximityResponseEnabled}
-              onToggleProximityResponse={handleToggleProximityResponse}
-              getProximityOutputValue={getProximityOutputValue}
-            />
+        {/* MAP TAB (NEW for Phase 3.3) */}
+        {currentTab === 'map' && (
+          <MapScreen
+            connectedDevice={connectedDevice}
+            darkMode={darkMode}
+            onSwitchTab={setCurrentTab}
+          />
+        )}
 
-            <button
-              onClick={handleDisconnect}
-              className="w-full mt-6 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-medium transition-all"
-            >
-              Disconnect
-            </button>
-          </>
+        {/* SETTINGS TAB */}
+        {currentTab === 'settings' && (
+          <div className="flex-1 overflow-y-auto">
+            <Settings
+              darkMode={darkMode}
+              onThemeToggle={handleThemeToggle}
+              connectedDevice={connectedDevice}
+              deviceName={deviceName}
+              onRenameDevice={(newName) => setDeviceName(newName)}
+              onDisconnect={handleDisconnect}
+              onResetSettings={handleResetAll}
+            />
+          </div>
         )}
       </main>
     </div>
