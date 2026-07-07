@@ -69,40 +69,54 @@ const MapScreen = ({ connectedDevice, darkMode, onSwitchTab }) => {
   // =========================================================================
   // INITIALIZE MAP
   // =========================================================================
-  useEffect(() => {
-    if (!mapRef.current || !window.google) return;
+useEffect(() => {
+  if (!mapRef.current) return;
+
+  // Wait for Google Maps API to load
+  const waitForGoogle = setInterval(() => {
+    if (!window.google) return;
+
+    clearInterval(waitForGoogle);
 
     const defaultCenter = { lat: -1.2921, lng: 36.8219 };
 
-    const mapInstance = new google.maps.Map(mapRef.current, {
-      zoom: 15,
-      center: defaultCenter,
-      mapTypeControl: false,
-      fullscreenControl: false,
-      streetViewControl: false,
-    });
+    try {
+      const mapInstance = new google.maps.Map(mapRef.current, {
+        zoom: 15,
+        center: defaultCenter,
+        mapTypeControl: false,
+        fullscreenControl: false,
+        streetViewControl: false,
+      });
 
-    mapInstanceRef.current = mapInstance;
+      mapInstanceRef.current = mapInstance;
 
-    const marker = new google.maps.Marker({
-      position: defaultCenter,
-      map: mapInstance,
-      title: 'Key Location',
-      icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
-    });
+      const marker = new google.maps.Marker({
+        position: defaultCenter,
+        map: mapInstance,
+        title: "Key Location",
+        icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+      });
 
-    markerRef.current = marker;
+      markerRef.current = marker;
 
-    // Get first location update
-    simulateGPSUpdate();
-    setPollingActive(true);
+      // Get first location update
+      simulateGPSUpdate();
+      setPollingActive(true);
 
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-    };
-  }, []);
+    } catch (error) {
+      console.error("Map initialization error:", error);
+    }
+  }, 100);
+
+  return () => {
+    clearInterval(waitForGoogle);
+
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+  };
+}, []);
 
   // =========================================================================
   // POLLING LOOP (every 5 seconds)
