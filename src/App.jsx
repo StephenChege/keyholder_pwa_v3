@@ -34,7 +34,7 @@ export default function App() {
   const [buzzerVolume, setBuzzerVolume] = useState(50);
 
   // =========================================================================
-  // TAB STATE (NEW for Phase 3.3)
+  // TAB STATE
   // =========================================================================
   const [currentTab, setCurrentTab] = useState('control'); // control, map, settings
 
@@ -51,6 +51,8 @@ export default function App() {
     rssi,
     proximityPercent,
     getProximityOutputValue,
+    location,        // NEW
+    locationMode,     // NEW
   } = useBLE();
 
   // =========================================================================
@@ -139,7 +141,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* TAB NAVIGATION (NEW for Phase 3.3) */}
+          {/* TAB NAVIGATION */}
           <div className={`flex gap-1 border-b ${borderClass}`}>
             <button
               onClick={() => setCurrentTab('control')}
@@ -248,12 +250,14 @@ export default function App() {
           </div>
         )}
 
-        {/* MAP TAB (NEW for Phase 3.3) */}
+        {/* MAP TAB */}
         {currentTab === 'map' && (
           <MapScreen
             connectedDevice={connectedDevice}
             darkMode={darkMode}
             onSwitchTab={setCurrentTab}
+            liveLocation={location}       // NEW
+            locationMode={locationMode}   // NEW
           />
         )}
 

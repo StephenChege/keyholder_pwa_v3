@@ -4,6 +4,7 @@ const SERVICE_UUID = '12345678-1234-1234-1234-123456789abc';
 const LED_WRITE_UUID = 'deadbeef-1234-1234-1234-123456789abc';
 const BUZZER_WRITE_UUID = 'deadbeef-1234-1234-1234-123456789abd';
 const RSSI_READ_UUID = 'abcd1234-5678-1234-5678-abcdef123457';
+const LOCATION_READ_UUID = '12345678-1234-1234-1234-123456789ace';
 
 // ============================================================================
 // Convert RSSI to proximity percentage (0-100%)
@@ -19,6 +20,17 @@ function rssiToProximity(rssi) {
   const proximity = ((clamped - minRSSI) / (maxRSSI - minRSSI)) * 100;
   
   return Math.round(Math.max(0, Math.min(100, proximity)));
+}
+
+function parseLocationValue(dataView) {
+  try {
+    const decoder = new TextDecoder('utf-8');
+    const jsonStr = decoder.decode(dataView);
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error('Failed to parse location JSON:', error);
+    return null;
+  }
 }
 
 // ============================================================================
@@ -43,12 +55,55 @@ export default function useBLE() {
   const [discoveryInProgress, setDiscoveryInProgress] = useState(false);
   const [rssi, setRssi] = useState(null);
   const [proximityPercent, setProximityPercent] = useState(0);
+  const [location, setLocation] = useState(null);
+  const [locationMode, setLocationMode] = useState('notify'); // 'notify' | 'polling'
   
   const deviceRef = useRef(null);
   const ledCharacteristicRef = useRef(null);
   const buzzerCharacteristicRef = useRef(null);
   const rssiCharacteristicRef = useRef(null);
   const pollingIntervalRef = useRef(null);
+  const locationCharacteristicRef = useRef(null);
+  const locationWatchdogRef = useRef(null);
+  const locationPollingRef = useRef(null);
+
+  const resetLocationWatchdog = useCallback(() => {
+  if (locationWatchdogRef.current) {
+    clearTimeout(locationWatchdogRef.current);
+  }
+  
+  // If no notification arrives within 8s, assume notify failed -> fallback to polling
+  locationWatchdogRef.current = setTimeout(() => {
+    console.warn('Location notify watchdog triggered — falling back to polling');
+    setLocationMode('polling');
+    startLocationPolling();
+  }, 8000);
+}, []);
+
+const startLocationPolling = useCallback(() => {
+  if (locationPollingRef.current) return; // already polling
+
+  const poll = async () => {
+    if (!locationCharacteristicRef.current) return;
+    try {
+      const value = await locationCharacteristicRef.current.readValue();
+      const parsed = parseLocationValue(value);
+      if (parsed) setLocation(parsed);
+    } catch (error) {
+      console.error('Location polling error:', error);
+    }
+  };
+
+  poll(); // immediate first read
+  locationPollingRef.current = setInterval(poll, 5000);
+}, []);
+
+const stopLocationPolling = useCallback(() => {
+  if (locationPollingRef.current) {
+    clearInterval(locationPollingRef.current);
+    locationPollingRef.current = null;
+  }
+}, []);
 
   // ========================================================================
   // Connect to Device
@@ -79,6 +134,29 @@ export default function useBLE() {
       // Get RSSI characteristic
       const rssiCharacteristic = await service.getCharacteristic(RSSI_READ_UUID);
       rssiCharacteristicRef.current = rssiCharacteristic;
+
+      // Get Location characteristic
+      const locationCharacteristic = await service.getCharacteristic(LOCATION_READ_UUID);
+      locationCharacteristicRef.current = locationCharacteristic;
+
+      // Try notify first
+      try {
+        await locationCharacteristic.startNotifications();
+        locationCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+          const parsed = parseLocationValue(event.target.value);
+          if (parsed) {
+            setLocation(parsed);
+            resetLocationWatchdog(); // reset timer on every successful notification
+          }
+        });
+        setLocationMode('notify');
+        resetLocationWatchdog();
+        console.log('Location: using notify mode');
+      } catch (error) {
+        console.warn('Notify failed, falling back to polling:', error);
+        setLocationMode('polling');
+        startLocationPolling();
+      }
 
       deviceRef.current = device;
 
@@ -120,6 +198,16 @@ export default function useBLE() {
       ledCharacteristicRef.current = null;
       buzzerCharacteristicRef.current = null;
       rssiCharacteristicRef.current = null;
+
+      // Add inside disconnect(), before setConnectedDevice(null):
+      if (locationWatchdogRef.current) {
+        clearTimeout(locationWatchdogRef.current);
+        locationWatchdogRef.current = null;
+      }
+      stopLocationPolling();
+      locationCharacteristicRef.current = null;
+      setLocation(null);
+
       setConnectedDevice(null);
       setRssi(null);
       setProximityPercent(0);
@@ -245,6 +333,8 @@ export default function useBLE() {
     sendBuzzerVolume,
     rssi,
     proximityPercent,
-    getProximityOutputValue
+    getProximityOutputValue,
+    location,
+    locationMode
   };
 }

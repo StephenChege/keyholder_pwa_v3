@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const MapScreen = ({ connectedDevice, darkMode, onSwitchTab }) => {
+const MapScreen = ({ connectedDevice, darkMode, onSwitchTab, liveLocation, locationMode }) => {
   const [location, setLocation] = useState(null);
   const [gpsStatus, setGpsStatus] = useState('searching');
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -11,16 +11,9 @@ const MapScreen = ({ connectedDevice, darkMode, onSwitchTab }) => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerRef = useRef(null);
-  const pollingIntervalRef = useRef(null);
-
-  const MOCKED_LOCATIONS = [
-    { lat: -1.2921, lon: 36.8219, accuracy: 8.5, status: 'valid' },
-    { lat: -1.3120, lon: 36.8155, accuracy: 7.2, status: 'valid' },
-    { lat: -1.2879, lon: 36.7964, accuracy: 9.1, status: 'valid' },
-  ];
 
   // =========================================================================
-  // INITIALIZE MAP (only once, with proper Google Maps check)
+  // INITIALIZE MAP (only once)
   // =========================================================================
   useEffect(() => {
     if (!mapRef.current) {
@@ -28,7 +21,6 @@ const MapScreen = ({ connectedDevice, darkMode, onSwitchTab }) => {
       return;
     }
 
-    // Check if Google Maps is available
     if (typeof google === 'undefined' || !google.maps) {
       console.error('Google Maps API not loaded');
       setError('Google Maps failed to load. Refresh the page.');
@@ -53,82 +45,40 @@ const MapScreen = ({ connectedDevice, darkMode, onSwitchTab }) => {
         position: defaultCenter,
         map: mapInstance,
         title: 'Key Location',
-        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+        icon: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
       });
 
       markerRef.current = marker;
       setMapLoaded(true);
       setError(null);
       console.log('Map initialized successfully');
-
-      // Simulate first location
-      const firstLoc = MOCKED_LOCATIONS[0];
-      setLocation({
-        lat: firstLoc.lat,
-        lon: firstLoc.lon,
-        accuracy: firstLoc.accuracy,
-        timestamp: new Date().toISOString(),
-      });
-      setGpsStatus('valid');
-      setLastUpdated(new Date());
-
     } catch (err) {
       console.error('Map initialization failed:', err);
       setError('Failed to initialize map: ' + err.message);
       setMapLoaded(false);
     }
-
-    // Cleanup
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-    };
-  }, []); // Empty dependency array - only run once
+  }, []); // Only run once
 
   // =========================================================================
-  // POLLING (separate effect, only when map is loaded)
+  // REACT TO REAL LOCATION UPDATES FROM BLE (replaces mocked polling)
   // =========================================================================
   useEffect(() => {
-    if (!mapLoaded || !mapInstanceRef.current || !markerRef.current) {
-      return;
+    if (!liveLocation || !mapLoaded) return;
+
+    setLocation({
+      lat: liveLocation.lat,
+      lon: liveLocation.lon,
+      accuracy: liveLocation.accuracy,
+      timestamp: new Date().toISOString(),
+    });
+    setGpsStatus(liveLocation.status || 'searching');
+    setLastUpdated(new Date());
+
+    if (markerRef.current && mapInstanceRef.current) {
+      markerRef.current.setPosition({ lat: liveLocation.lat, lng: liveLocation.lon });
+      mapInstanceRef.current.panTo({ lat: liveLocation.lat, lng: liveLocation.lon });
     }
-
-    console.log('Starting polling...');
-
-    const poll = () => {
-      try {
-        const randomIndex = Math.floor(Math.random() * MOCKED_LOCATIONS.length);
-        const loc = MOCKED_LOCATIONS[randomIndex];
-
-        setLocation({
-          lat: loc.lat,
-          lon: loc.lon,
-          accuracy: loc.accuracy,
-          timestamp: new Date().toISOString(),
-        });
-        setGpsStatus('valid');
-        setLastUpdated(new Date());
-
-        // Update marker position
-        if (markerRef.current && mapInstanceRef.current) {
-          markerRef.current.setPosition({ lat: loc.lat, lng: loc.lon });
-          mapInstanceRef.current.panTo({ lat: loc.lat, lng: loc.lon });
-        }
-      } catch (err) {
-        console.error('Polling error:', err);
-      }
-    };
-
-    // Start polling every 5 seconds
-    pollingIntervalRef.current = setInterval(poll, 5000);
-
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-    };
-  }, [mapLoaded]); // Only re-run if mapLoaded changes
+  }, [liveLocation, mapLoaded]);
 
   // =========================================================================
   // SAVE LOCATION
@@ -195,11 +145,20 @@ const MapScreen = ({ connectedDevice, darkMode, onSwitchTab }) => {
           <div className="flex items-center space-x-2">
             <div
               className={`w-3 h-3 rounded-full ${
-                gpsStatus === 'valid' ? 'bg-green-500' : 'bg-gray-400'
+                gpsStatus === 'valid'
+                  ? 'bg-green-500'
+                  : gpsStatus === 'stale'
+                  ? 'bg-yellow-500'
+                  : gpsStatus === 'no_fix'
+                  ? 'bg-red-500'
+                  : 'bg-gray-400'
               }`}
             />
             <span className="text-sm font-semibold">
               {gpsStatus === 'valid' && '✓ GPS Fixed'}
+              {gpsStatus === 'searching' && '🔍 Searching...'}
+              {gpsStatus === 'stale' && '⚠️ Last Known Location'}
+              {gpsStatus === 'no_fix' && '❌ No Signal'}
             </span>
           </div>
 
@@ -261,8 +220,8 @@ const MapScreen = ({ connectedDevice, darkMode, onSwitchTab }) => {
             </button>
           </div>
 
-          <p className={`text-xs italic ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>
-            📌 Phase 3.3 MVP: Mocked location. Phase 3.1 will use real GPS from ESP32.
+          <p className={`text-xs ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>
+            📡 Mode: {locationMode === 'notify' ? 'Live updates' : 'Polling (5s)'}
           </p>
         </div>
       )}
