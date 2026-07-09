@@ -3,13 +3,13 @@ import { getDatabase, ref, set, get } from 'firebase/database';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyAO4AGI2fK1ly-4Tlr1G0YYTI7-jx_5oCE",
-  authDomain: "keyholder-phase3.firebaseapp.com",
-  databaseURL: "https://keyholder-phase3-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "keyholder-phase3",
-  storageBucket: "keyholder-phase3.firebasestorage.app",
-  messagingSenderId: "413276678459",
-  appId: "1:413276678459:web:7f8186991558563de5af1e"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 // Initialize Firebase
