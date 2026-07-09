@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { saveLocationToFirebase, loadLocationFromFirebase } from '../firebase';
 
 const MapScreen = ({ connectedDevice, darkMode, onSwitchTab, liveLocation, locationMode }) => {
   const [location, setLocation] = useState(null);
@@ -6,11 +7,14 @@ const MapScreen = ({ connectedDevice, darkMode, onSwitchTab, liveLocation, locat
   const [lastUpdated, setLastUpdated] = useState(null);
   const [saveStatus, setSaveStatus] = useState('idle');
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [firebaseLocation, setFirebaseLocation] = useState(null);
+  const [firebaseLastSaved, setFirebaseLastSaved] = useState(null);
   const [error, setError] = useState(null);
 
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerRef = useRef(null);
+  const autoSaveIntervalRef = useRef(null);
 
   // =========================================================================
   // INITIALIZE MAP (only once)
@@ -58,6 +62,61 @@ const MapScreen = ({ connectedDevice, darkMode, onSwitchTab, liveLocation, locat
       setMapLoaded(false);
     }
   }, []); // Only run once
+
+  // =========================================================================
+  // AUTO-LOAD last saved Firebase location on mount (works without BLE)
+  // =========================================================================
+  useEffect(() => {
+    const deviceName = connectedDevice?.name || 'ESP32_Proximity';
+    loadLocationFromFirebase(deviceName).then((saved) => {
+      if (saved) {
+        setFirebaseLocation(saved);
+        setFirebaseLastSaved(saved.lastUpdated);
+
+        // If no live BLE location yet, show Firebase location on map immediately
+        if (!liveLocation && markerRef.current && mapInstanceRef.current) {
+          markerRef.current.setPosition({ lat: saved.lat, lng: saved.lon });
+          mapInstanceRef.current.panTo({ lat: saved.lat, lng: saved.lon });
+          setLocation({ lat: saved.lat, lon: saved.lon, accuracy: saved.accuracy, timestamp: saved.timestamp });
+          setGpsStatus('firebase-cached'); // distinct status for UI
+        }
+      }
+    });
+  }, [mapLoaded]); // run once map is ready
+
+  // =========================================================================
+  // AUTO-SAVE to Firebase every 60s, only when GPS status is "valid"
+  // =========================================================================
+  useEffect(() => {
+    if (!connectedDevice) {
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current);
+        autoSaveIntervalRef.current = null;
+      }
+      return;
+    }
+
+    const deviceName = connectedDevice.name || 'ESP32_Proximity';
+
+    const trySave = () => {
+      if (gpsStatus === 'valid' && location) {
+        saveLocationToFirebase(deviceName, location).then((success) => {
+          if (success) setFirebaseLastSaved(Date.now());
+        });
+      }
+    };
+
+    autoSaveIntervalRef.current = setInterval(trySave, 60000); // every 60s
+
+    return () => {
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current);
+        autoSaveIntervalRef.current = null;
+      }
+    };
+  }, [connectedDevice, gpsStatus, location]);
+
+
 
   // =========================================================================
   // REACT TO REAL LOCATION UPDATES FROM BLE (replaces mocked polling)
@@ -158,6 +217,7 @@ const MapScreen = ({ connectedDevice, darkMode, onSwitchTab, liveLocation, locat
               {gpsStatus === 'valid' && '✓ GPS Fixed'}
               {gpsStatus === 'searching' && '🔍 Searching...'}
               {gpsStatus === 'stale' && '⚠️ Last Known Location'}
+              {gpsStatus === 'firebase-cached' && '☁️ Last Saved Location'}
               {gpsStatus === 'no_fix' && '❌ No Signal'}
             </span>
           </div>
@@ -195,6 +255,12 @@ const MapScreen = ({ connectedDevice, darkMode, onSwitchTab, liveLocation, locat
                 </p>
               </div>
             </div>
+          )}
+
+          {firebaseLastSaved && (
+            <p className={`text-xs ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>
+              ☁️ Cloud saved: {Math.floor((Date.now() - firebaseLastSaved) / 60000)} min ago
+            </p>
           )}
 
           <div className="flex gap-2 pt-2">
